@@ -17,26 +17,26 @@
 #            Runtime Docker Image
 ##########################################################
 # Use ubi-minimal as the base image
-FROM quay.io/johara/hpo-base
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.4
 
 ARG HPO_VERSION
 
 WORKDIR /opt/app
 
-LABEL name="Kruize HPO" \
-      vendor="Red Hat" \
-      version=${HPO_VERSION} \
-      release=${HPO_VERSION} \
-      run="docker run --rm -it -p 8085:8085 <image_name:tag>" \
-      summary="Docker Image for HPO with ubi-minimal" \
-      description="For more information on this image please see https://github.com/kruize/hpo/blob/main/README.md"
+# Install packages needed for python to function correctly
+# Create the non root user, same as the one used in the build phase.
+RUN microdnf install -y python3 gcc-c++ python3-devel \
+    && microdnf update -y \
+    && microdnf -y install shadow-utils \
+    && adduser -u 1001 -G root -s /usr/sbin/nologin default \
+    && chown -R 1001:0 /opt/app \
+    && chmod -R g+rw /opt/app \
+    && microdnf -y remove shadow-utils \
+    && microdnf clean all
 
-# Copy ML hyperparameter tuning code
-COPY --chown=1001:0 src /opt/app/src/
-COPY --chown=1001:0 index.html /opt/app/
+# Switch to the non root user
+USER 1001
 
+# Install optuna to the default user
+RUN python3 -m pip install --user optuna requests scikit-optimize jsonschema click grpcio protobuf==3.19.4
 
-EXPOSE 8085
-EXPOSE 50051
-
-ENTRYPOINT python3 -u src/service.py
